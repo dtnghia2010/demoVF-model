@@ -1,8 +1,10 @@
+import pandas as pd
 import streamlit as st
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
 from PIL import Image
+import requests
 
 # ---------------------------
 # Sidebar: Description About the App
@@ -63,7 +65,7 @@ def load_model(checkpoint_path, num_classes=9):
 # Adjust the checkpoint path if necessary.
 checkpoint_path = "pretrained-efficientnet_model.pth"
 model, device = load_model(checkpoint_path, num_classes=9)
-st.write("Model loaded successfully!")
+# st.write("Model loaded successfully!")
 
 # ---------------------------
 # 2. Define the Transformation
@@ -88,45 +90,119 @@ class_names = [
 ]
 
 # ---------------------------
-# 4. Streamlit UI: Select Images and Predict
+# Toolbar navigation
 # ---------------------------
-st.title("Smart Vertical Farming: Disease Detection")
-st.write("Select one or more image files using the file uploader below:")
+tabs = st.tabs(["📊 ThingSpeak Data Monitoring", "🌱 Lettuce Disease Classification"])
 
-# Use the file uploader to allow manual selection of images.
-uploaded_files = st.file_uploader("Choose image files", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-if uploaded_files:
-    if st.button("Predict"):
-        st.write("### Predictions")
-        # Lists to store images and predicted labels.
-        images_list = []
-        predicted_labels = []
 
-        # Process each uploaded file.
-        for uploaded_file in uploaded_files:
-            # Open the image.
-            image = Image.open(uploaded_file).convert("RGB")
-            # Preprocess the image.
-            input_tensor = test_transform(image).unsqueeze(0).to(device)
+# ---------------------------
+# Streamlit UI: Select Images and Predict
+# ---------------------------
+with tabs[1]:
+    st.title("Smart Vertical Farming: Disease Detection")
+    st.write("Select one or more image files using the file uploader below:")
 
-            with torch.no_grad():
-                outputs = model(input_tensor)
-                _, pred = torch.max(outputs, 1)
+    # Use the file uploader to allow manual selection of images.
+    uploaded_files = st.file_uploader("Choose image files", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-            # Map the numerical prediction to a class name.
-            predicted_label = class_names[pred.item()]
+    if uploaded_files:
+        if st.button("Predict"):
+            st.write("### Predictions")
+            # Lists to store images and predicted labels.
+            images_list = []
+            predicted_labels = []
 
-            images_list.append(image)
-            predicted_labels.append(predicted_label)
+            # Process each uploaded file.
+            for uploaded_file in uploaded_files:
+                # Open the image.
+                image = Image.open(uploaded_file).convert("RGB")
+                # Preprocess the image.
+                input_tensor = test_transform(image).unsqueeze(0).to(device)
 
-        # ---------------------------
-        # 5. Display the Images in a Grid with 5 Columns per Row
-        # ---------------------------
-        num_cols = 5
-        num_images = len(images_list)
-        for i in range(0, num_images, num_cols):
-            cols = st.columns(num_cols)
-            for j, image in enumerate(images_list[i:i + num_cols]):
-                caption = f"Predicted: {predicted_labels[i + j]}"
-                cols[j].image(image, caption=caption, use_container_width=True)
+                with torch.no_grad():
+                    outputs = model(input_tensor)
+                    _, pred = torch.max(outputs, 1)
+
+                # Map the numerical prediction to a class name.
+                predicted_label = class_names[pred.item()]
+
+                images_list.append(image)
+                predicted_labels.append(predicted_label)
+
+            # ---------------------------
+            # 5. Display the Images in a Grid with 5 Columns per Row
+            # ---------------------------
+            num_cols = 5
+            num_images = len(images_list)
+            for i in range(0, num_images, num_cols):
+                cols = st.columns(num_cols)
+                for j, image in enumerate(images_list[i:i + num_cols]):
+                    caption = f"Predicted: {predicted_labels[i + j]}"
+                    cols[j].image(image, caption=caption, use_container_width=True)
+
+
+# ---------------------------
+# ThingSpeak data monitoring
+# ---------------------------
+with tabs[0]:
+    st.title("Smart Vertical Farming: Real-time Data From Your System")
+    #User inputs
+    channel_id = 2776169
+    read_api_key = "QUYUP24IJN8OHY5S"
+    num_results = 20
+    url = f"https://api.thingspeak.com/channels/{channel_id}/feeds.json?api_key={read_api_key}&results={num_results}"
+    try:
+        response = requests.get(url)
+        data = response.json()
+
+        if "feeds" in data:
+            feeds = data['feeds']
+            df = pd.DataFrame(feeds)
+
+            #display data
+            with st.expander("### Retrieved Data From Your System"):
+                st.dataframe(df)
+
+            # Pump Status Display
+            if 'field3' in df:
+                latest_pump_state = int(df['field3'].dropna().iloc[-1])  # Get the latest pump status
+                pump_status = "ON" if latest_pump_state == 1 else "OFF"
+                color = "green" if latest_pump_state == 1 else "red"
+
+                # Elegant Pump Status Indicator
+                pump_status_html = f"""
+                <div style='display: flex; align-items: center; gap: 8px; text-align: left;'>
+                    <div style='
+                        width: 18px; 
+                        height: 18px; 
+                        background-color: {color}; 
+                        border-radius: 50%; 
+                        border: 2px solid black;
+                        box-shadow: 0 0 5px {color};
+                    '></div>
+                    <span style='font-size: 16px; font-weight: bold; color: #333;'>Pump Status:</span>
+                    <span style='font-size: 16px; font-weight: bold; color: {color};'>{pump_status}</span>
+                </div>
+                """
+                st.markdown(pump_status_html, unsafe_allow_html=True)
+
+            # 1️⃣ Field 1 - Temperature (Line Chart)
+            st.write("Smart farming systems use an intelligent on/off control to prevent overload.  Activating components (irrigation, sensors, lighting) only when needed, based on real-time data, saves energy, protects equipment, and optimizes resource use.  This dynamic on/off cycle ensures efficient and sustainable operation.")
+            st.write("The system will sleep for an hour after a few hours of working!")
+            if 'field1' in df:
+                st.subheader("🌡️ Temperature")
+                st.line_chart(df.set_index('created_at')['field1'].astype(float))
+
+            # 2️⃣ Field 2 - Light Intensity (Line Chart)
+            if 'field2' in df:
+                st.subheader("💡 Light Intensity")
+                st.line_chart(df.set_index('created_at')['field2'].astype(float))
+
+
+
+        else:
+            st.warning("No data found or error occur in the system.")
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
+
