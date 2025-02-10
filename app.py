@@ -4,6 +4,38 @@ import torch.nn as nn
 from torchvision import models, transforms
 from PIL import Image
 
+# ---------------------------
+# Sidebar: Description About the App
+# ---------------------------
+st.sidebar.title("About This App")
+st.sidebar.markdown(
+    """
+    **Lettuce Disease Classifier**
+
+    This web application helps you classify diseases on lettuce leaves using a deep learning model.
+
+    Simply upload your image(s) below, and the model will predict the disease condition of your lettuce.
+    """
+)
+
+disease_descriptions = {
+    "bacterial": "Bacterial diseases cause spots and lesions on lettuce leaves due to bacterial infection.",
+    "downy": "Downy mildew appears as a fuzzy, discolored growth on the underside of leaves.",
+    "fungal": "Fungal diseases are marked by moldy growth and discoloration on leaves.",
+    "healthy": "Healthy lettuce shows vibrant, green leaves that are free from disease symptoms.",
+    "powdery": "Powdery mildew is characterized by a white, powdery coating on the leaf surface.",
+    "septoria": "Septoria leaf spot presents as small, circular spots with dark borders on the leaves.",
+    "unhealthy": "Unhealthy leaves may show general discoloration, wilting, or other signs of stress.",
+    "viral": "Viral infections often lead to mottled, deformed, or stunted leaves.",
+    "wilt": "Wilt is indicated by drooping, water-soaked tissues and a loss of firmness in the leaves."
+}
+
+st.sidebar.markdown("### Disease Category Description")
+#create a toggle (expander) for each disease category
+for disease, description in disease_descriptions.items():
+    with st.sidebar.expander(disease.capitalize()):
+        st.write(description)
+
 
 # ---------------------------
 # 1. Load the Pretrained Model
